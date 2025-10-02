@@ -1,5 +1,5 @@
 import express from 'express';
-import { pool } from '../index.js';
+import { db } from '../index.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { GAME_CONFIG, GACHA_POOL, CHARACTER_DATA } from '../config/game-config.js';
 
@@ -21,23 +21,17 @@ router.post('/pull', authenticateToken, async (req, res) => {
     const cost = count === 1 ? GAME_CONFIG.gacha.cost.single : GAME_CONFIG.gacha.cost.ten;
 
     // Check if user has enough fate tokens
-    const userResult = await pool.query(
-      'SELECT fate_tokens FROM users WHERE id = $1',
-      [req.user.userId]
-    );
+    const user = db.findOne('users', { id: req.user.userId });
 
-    if (userResult.rows[0].fate_tokens < cost) {
+    if (user.fate_tokens < cost) {
       return res.status(400).json({ error: 'Insufficient Fate Tokens' });
     }
 
     // Get pity info
-    const pityResult = await pool.query(
-      'SELECT pity_count, is_guaranteed FROM gacha_pity WHERE user_id = $1 AND banner_type = $2',
-      [req.user.userId, banner_id]
-    );
+    const pityInfo = db.findOne('gacha_pity', { user_id: req.user.userId, banner_type: banner_id });
 
-    let pityCount = pityResult.rows[0]?.pity_count || 0;
-    let isGuaranteed = pityResult.rows[0]?.is_guaranteed || false;
+    let pityCount = pityInfo?.pity_count || 0;
+    let isGuaranteed = pityInfo?.is_guaranteed || false;
 
     const results = [];
 
@@ -110,22 +104,14 @@ router.post('/pull', authenticateToken, async (req, res) => {
       };
 
       // Add character to user's roster (or convert to eidolon if duplicate)
-      const existingChar = await pool.query(
-        `SELECT id, eidolon FROM characters 
-         WHERE user_id = $1 AND character_name = $2`,
-        [req.user.userId, characterName]
-      );
+      const existingChar = db.findOne('characters', { user_id: req.user.userId, character_name: characterName });
 
       let result;
-      if (existingChar.rows.length > 0) {
+      if (existingChar) {
         // Duplicate - increase eidolon
-        const char = existingChar.rows[0];
-        const newEidolon = Math.min(char.eidolon + 1, 6);
+        const newEidolon = Math.min(existingChar.eidolon + 1, 6);
         
-        await pool.query(
-          'UPDATE characters SET eidolon = $1 WHERE id = $2',
-          [newEidolon, char.id]
-        );
+        db.update('characters', { id: existingChar.id }, { eidolon: newEidolon });
 
         result = {
           type: 'duplicate',
@@ -136,23 +122,30 @@ router.post('/pull', authenticateToken, async (req, res) => {
         };
       } else {
         // New character
-        await pool.query(
-          `INSERT INTO characters 
-           (user_id, character_name, pathway_id, sequence, rarity, hp, atk, def, res, spd)
-           VALUES ($1, $2, (SELECT id FROM pathways WHERE name = $3), $4, $5, $6, $7, $8, $9, $10)`,
-          [
-            req.user.userId,
-            characterName,
-            charData.pathway,
-            charData.sequence,
-            charData.rarity,
-            charData.baseStats.hp,
-            charData.baseStats.atk,
-            charData.baseStats.def,
-            charData.baseStats.res,
-            charData.baseStats.spd,
-          ]
-        );
+        const pathway = db.findOne('pathways', { name: charData.pathway });
+        
+        db.insert('characters', {
+          user_id: req.user.userId,
+          character_name: characterName,
+          pathway_id: pathway.id,
+          sequence: charData.sequence,
+          rarity: charData.rarity,
+          level: 1,
+          ascension: 0,
+          acting_progress: 0,
+          eidolon: 0,
+          hp: charData.baseStats.hp,
+          atk: charData.baseStats.atk,
+          def: charData.baseStats.def,
+          res: charData.baseStats.res,
+          spd: charData.baseStats.spd,
+          crit_rate: 5,
+          crit_dmg: 150,
+          effect: 0,
+          effectres: 0,
+          is_locked: false,
+          obtained_at: new Date().toISOString(),
+        });
 
         result = {
           type: 'new',
@@ -164,29 +157,33 @@ router.post('/pull', authenticateToken, async (req, res) => {
       }
 
       // Record in gacha history
-      await pool.query(
-        `INSERT INTO gacha_history (user_id, banner_type, item_type, item_name, rarity, pity_count)
-         VALUES ($1, $2, 'character', $3, $4, $5)`,
-        [req.user.userId, banner_id, characterName, rarity, pityCount]
-      );
+      db.insert('gacha_history', {
+        user_id: req.user.userId,
+        banner_type: banner_id,
+        item_type: 'character',
+        item_name: characterName,
+        rarity,
+        pity_count: pityCount,
+        pulled_at: new Date().toISOString(),
+      });
 
       results.push(result);
     }
 
     // Update pity counter
-    await pool.query(
-      `INSERT INTO gacha_pity (user_id, banner_type, pity_count, is_guaranteed)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (user_id, banner_type) 
-       DO UPDATE SET pity_count = $3, is_guaranteed = $4`,
-      [req.user.userId, banner_id, pityCount, isGuaranteed]
-    );
+    if (pityInfo) {
+      db.update('gacha_pity', { id: pityInfo.id }, { pity_count: pityCount, is_guaranteed: isGuaranteed });
+    } else {
+      db.insert('gacha_pity', {
+        user_id: req.user.userId,
+        banner_type: banner_id,
+        pity_count: pityCount,
+        is_guaranteed: isGuaranteed,
+      });
+    }
 
     // Deduct fate tokens
-    await pool.query(
-      'UPDATE users SET fate_tokens = fate_tokens - $1 WHERE id = $2',
-      [cost, req.user.userId]
-    );
+    db.update('users', { id: req.user.userId }, { fate_tokens: user.fate_tokens - cost });
 
     res.json({
       results,
@@ -203,15 +200,12 @@ router.post('/pull', authenticateToken, async (req, res) => {
 // Get gacha history
 router.get('/history', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT * FROM gacha_history 
-       WHERE user_id = $1 
-       ORDER BY pulled_at DESC 
-       LIMIT 100`,
-      [req.user.userId]
-    );
+    const history = db.findMany('gacha_history', { user_id: req.user.userId }, { limit: 100 });
+    
+    // Sort by pulled_at DESC
+    history.sort((a, b) => new Date(b.pulled_at) - new Date(a.pulled_at));
 
-    res.json(result.rows);
+    res.json(history);
   } catch (error) {
     console.error('Gacha history error:', error);
     res.status(500).json({ error: 'Failed to get gacha history' });

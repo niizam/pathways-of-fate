@@ -1,5 +1,5 @@
 import express from 'express';
-import { pool, redisClient } from '../index.js';
+import { db, cache } from '../index.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { GAME_CONFIG } from '../config/game-config.js';
 
@@ -15,24 +15,25 @@ router.post('/start', authenticateToken, async (req, res) => {
     }
 
     // Get characters
-    const characters = await pool.query(
-      `SELECT c.*, p.name as pathway_name 
-       FROM characters c 
-       JOIN pathways p ON c.pathway_id = p.id
-       WHERE c.id = ANY($1) AND c.user_id = $2`,
-      [team, req.user.userId]
-    );
+    const allCharacters = db.findMany('characters', { user_id: req.user.userId });
+    const characters = allCharacters.filter(c => team.includes(c.id));
 
-    if (characters.rows.length !== 4) {
+    if (characters.length !== 4) {
       return res.status(400).json({ error: 'Invalid team composition' });
     }
+
+    // Add pathway names
+    const charactersWithPathways = characters.map(c => {
+      const pathway = db.findOne('pathways', { id: c.pathway_id });
+      return { ...c, pathway_name: pathway?.name };
+    });
 
     // Initialize battle state
     const battleState = {
       battleId: `battle_${Date.now()}_${req.user.userId}`,
       userId: req.user.userId,
       stageId: stage_id,
-      team: characters.rows.map(c => ({
+      team: charactersWithPathways.map(c => ({
         ...c,
         currentHp: c.hp,
         energy: GAME_CONFIG.battle.startingEnergy,
@@ -46,12 +47,8 @@ router.post('/start', authenticateToken, async (req, res) => {
       createdAt: new Date().toISOString(),
     };
 
-    // Store in Redis for quick access (expires in 1 hour)
-    await redisClient.setEx(
-      `battle:${battleState.battleId}`,
-      3600,
-      JSON.stringify(battleState)
-    );
+    // Store in cache for quick access (expires in 1 hour)
+    cache.set(`battle:${battleState.battleId}`, battleState, 3600);
 
     res.json({
       battleId: battleState.battleId,
@@ -70,13 +67,11 @@ router.post('/action', authenticateToken, async (req, res) => {
   try {
     const { battle_id, action } = req.body;
 
-    // Get battle state from Redis
-    const battleData = await redisClient.get(`battle:${battle_id}`);
-    if (!battleData) {
+    // Get battle state from cache
+    const battleState = cache.get(`battle:${battle_id}`);
+    if (!battleState) {
       return res.status(404).json({ error: 'Battle not found or expired' });
     }
-
-    const battleState = JSON.parse(battleData);
 
     if (battleState.userId !== req.user.userId) {
       return res.status(403).json({ error: 'Not your battle' });
@@ -154,11 +149,7 @@ router.post('/action', authenticateToken, async (req, res) => {
     battleState.turn++;
 
     // Update battle state
-    await redisClient.setEx(
-      `battle:${battle_id}`,
-      3600,
-      JSON.stringify(battleState)
-    );
+    cache.set(`battle:${battle_id}`, battleState, 3600);
 
     res.json({
       actionResult,
@@ -178,12 +169,10 @@ router.post('/action', authenticateToken, async (req, res) => {
 // Get battle result
 router.get('/result/:battle_id', authenticateToken, async (req, res) => {
   try {
-    const battleData = await redisClient.get(`battle:${req.params.battle_id}`);
-    if (!battleData) {
+    const battleState = cache.get(`battle:${req.params.battle_id}`);
+    if (!battleState) {
       return res.status(404).json({ error: 'Battle not found' });
     }
-
-    const battleState = JSON.parse(battleData);
 
     if (battleState.userId !== req.user.userId) {
       return res.status(403).json({ error: 'Not your battle' });
@@ -289,19 +278,38 @@ async function completeBattle(battleState, victory) {
     const goldReward = 100 + (battleState.stageId * 50);
     const expReward = 50 + (battleState.stageId * 25);
 
-    await pool.query(
-      'UPDATE users SET gold = gold + $1, experience = experience + $2 WHERE id = $3',
-      [goldReward, expReward, battleState.userId]
-    );
+    const user = db.findOne('users', { id: battleState.userId });
+    db.update('users', { id: battleState.userId }, {
+      gold: user.gold + goldReward,
+      experience: user.experience + expReward,
+    });
 
     // Update story progress
-    await pool.query(
-      `INSERT INTO story_progress (user_id, chapter, stage, stars, completed)
-       VALUES ($1, $2, $3, 3, true)
-       ON CONFLICT (user_id, chapter, stage, difficulty) 
-       DO UPDATE SET stars = GREATEST(story_progress.stars, 3), completed = true`,
-      [battleState.userId, Math.floor(battleState.stageId / 10), battleState.stageId % 10]
-    );
+    const chapter = Math.floor(battleState.stageId / 10);
+    const stage = battleState.stageId % 10;
+    const existingProgress = db.findOne('story_progress', {
+      user_id: battleState.userId,
+      chapter,
+      stage,
+      difficulty: 'normal',
+    });
+
+    if (existingProgress) {
+      db.update('story_progress', { id: existingProgress.id }, {
+        stars: Math.max(existingProgress.stars, 3),
+        completed: true,
+      });
+    } else {
+      db.insert('story_progress', {
+        user_id: battleState.userId,
+        chapter,
+        stage,
+        difficulty: 'normal',
+        stars: 3,
+        completed: true,
+        first_clear_bonus_claimed: false,
+      });
+    }
 
     battleState.rewards = { gold: goldReward, exp: expReward };
   }

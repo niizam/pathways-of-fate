@@ -1,37 +1,6 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:13
-    container_name: pathways-postgres
-    environment:
-      POSTGRES_DB: pathways_of_fate
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_password
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./server/db/init.sql:/docker-entrypoint-initdb.d/init.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:6-alpine
-    container_name: pathways-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-
   server:
     build: ./server
     container_name: pathways-server
@@ -39,20 +8,10 @@ services:
       - "5000:5000"
     environment:
       - NODE_ENV=production
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=pathways_of_fate
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres_password
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
       - JWT_SECRET=your_jwt_secret_change_in_production
       - JWT_EXPIRATION=24h
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    volumes:
+      - ./server/db/data:/app/db/data
     restart: unless-stopped
 
   client:
@@ -63,7 +22,3 @@ services:
     depends_on:
       - server
     restart: unless-stopped
-
-volumes:
-  postgres_data:
-  redis_data:

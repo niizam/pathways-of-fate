@@ -1,5 +1,5 @@
 import express from 'express';
-import { pool } from '../index.js';
+import { db } from '../index.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -7,37 +7,43 @@ const router = express.Router();
 // Get player profile
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const userResult = await pool.query(
-      `SELECT id, email, username, account_level, world_level, experience, 
-              stamina, last_stamina_regen, fate_tokens, gold, created_at, last_login
-       FROM users WHERE id = $1`,
-      [req.user.userId]
-    );
+    const user = db.findOne('users', { id: req.user.userId });
 
-    if (userResult.rows.length === 0) {
+    if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const user = userResult.rows[0];
-
     // Get character count
-    const charCount = await pool.query(
-      'SELECT COUNT(*) as total, rarity, COUNT(CASE WHEN rarity = 5 THEN 1 END) as five_star FROM characters WHERE user_id = $1 GROUP BY rarity',
-      [req.user.userId]
-    );
+    const characters = db.findMany('characters', { user_id: req.user.userId });
+    const charactersOwned = characters.length;
+    const fiveStarCharacters = characters.filter(c => c.rarity === 5).length;
 
     // Get story progress
-    const storyProgress = await pool.query(
-      'SELECT MAX(chapter) as max_chapter, COUNT(*) as stages_cleared FROM story_progress WHERE user_id = $1 AND completed = true',
-      [req.user.userId]
-    );
+    const storyProgress = db.findMany('story_progress', { user_id: req.user.userId, completed: true });
+    const maxChapter = storyProgress.length > 0 ? Math.max(...storyProgress.map(s => s.chapter)) : 0;
 
     res.json({
-      user,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        account_level: user.account_level,
+        world_level: user.world_level,
+        experience: user.experience,
+        stamina: user.stamina,
+        last_stamina_regen: user.last_stamina_regen,
+        fate_tokens: user.fate_tokens,
+        gold: user.gold,
+        created_at: user.created_at,
+        last_login: user.last_login,
+      },
       stats: {
-        charactersOwned: charCount.rows.reduce((sum, r) => sum + parseInt(r.total), 0),
-        fiveStarCharacters: charCount.rows.find(r => r.rarity === 5)?.five_star || 0,
-        storyProgress: storyProgress.rows[0],
+        charactersOwned,
+        fiveStarCharacters,
+        storyProgress: {
+          max_chapter: maxChapter,
+          stages_cleared: storyProgress.length,
+        },
       },
     });
   } catch (error) {
@@ -50,25 +56,19 @@ router.get('/', authenticateToken, async (req, res) => {
 router.get('/stats', authenticateToken, async (req, res) => {
   try {
     // Get gacha statistics
-    const gachaStats = await pool.query(
-      `SELECT 
-        COUNT(*) as total_pulls,
-        COUNT(CASE WHEN rarity = 5 THEN 1 END) as five_star_pulls,
-        COUNT(CASE WHEN rarity = 4 THEN 1 END) as four_star_pulls
-       FROM gacha_history WHERE user_id = $1`,
-      [req.user.userId]
-    );
+    const gachaHistory = db.findMany('gacha_history', { user_id: req.user.userId });
+    const total_pulls = gachaHistory.length;
+    const five_star_pulls = gachaHistory.filter(h => h.rarity === 5).length;
+    const four_star_pulls = gachaHistory.filter(h => h.rarity === 4).length;
 
     // Get achievements
-    const achievements = await pool.query(
-      `SELECT COUNT(*) as total, COUNT(CASE WHEN completed = true THEN 1 END) as completed
-       FROM achievements WHERE user_id = $1`,
-      [req.user.userId]
-    );
+    const achievements = db.findMany('achievements', { user_id: req.user.userId });
+    const total = achievements.length;
+    const completed = achievements.filter(a => a.completed).length;
 
     res.json({
-      gacha: gachaStats.rows[0],
-      achievements: achievements.rows[0],
+      gacha: { total_pulls, five_star_pulls, four_star_pulls },
+      achievements: { total, completed },
     });
   } catch (error) {
     console.error('Stats error:', error);

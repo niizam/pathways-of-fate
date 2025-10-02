@@ -1,5 +1,5 @@
 import express from 'express';
-import { pool } from '../index.js';
+import { db } from '../index.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -7,12 +7,17 @@ const router = express.Router();
 // Get user inventory
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM inventory WHERE user_id = $1 ORDER BY item_type, item_name',
-      [req.user.userId]
-    );
+    const inventory = db.findMany('inventory', { user_id: req.user.userId });
+    
+    // Sort by item_type, then item_name
+    inventory.sort((a, b) => {
+      if (a.item_type !== b.item_type) {
+        return a.item_type.localeCompare(b.item_type);
+      }
+      return a.item_name.localeCompare(b.item_name);
+    });
 
-    res.json(result.rows);
+    res.json(inventory);
   } catch (error) {
     console.error('Get inventory error:', error);
     res.status(500).json({ error: 'Failed to get inventory' });
@@ -25,16 +30,11 @@ router.post('/use', authenticateToken, async (req, res) => {
     const { item_id, target_id } = req.body;
 
     // Get item
-    const itemResult = await pool.query(
-      'SELECT * FROM inventory WHERE id = $1 AND user_id = $2',
-      [item_id, req.user.userId]
-    );
+    const item = db.findOne('inventory', { id: item_id, user_id: req.user.userId });
 
-    if (itemResult.rows.length === 0) {
+    if (!item) {
       return res.status(404).json({ error: 'Item not found' });
     }
-
-    const item = itemResult.rows[0];
 
     if (item.quantity < 1) {
       return res.status(400).json({ error: 'Item out of stock' });
@@ -62,12 +62,9 @@ router.post('/use', authenticateToken, async (req, res) => {
 
     // Decrease quantity
     if (item.quantity === 1) {
-      await pool.query('DELETE FROM inventory WHERE id = $1', [item_id]);
+      db.delete('inventory', { id: item_id });
     } else {
-      await pool.query(
-        'UPDATE inventory SET quantity = quantity - 1 WHERE id = $1',
-        [item_id]
-      );
+      db.update('inventory', { id: item_id }, { quantity: item.quantity - 1 });
     }
 
     res.json(result);

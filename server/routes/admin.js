@@ -1,5 +1,5 @@
 import express from 'express';
-import { pool } from '../index.js';
+import { db } from '../index.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -8,18 +8,14 @@ const router = express.Router();
 const isAdmin = async (req, res, next) => {
   try {
     // Check if user is admin (simple check - in production use role-based access)
-    const result = await pool.query(
-      'SELECT email FROM users WHERE id = $1',
-      [req.user.userId]
-    );
+    const user = db.findOne('users', { id: req.user.userId });
     
-    if (result.rows.length === 0) {
+    if (!user) {
       return res.status(403).json({ error: 'Access denied' });
     }
     
     // For demo purposes, admins are users with emails ending in @admin.com
     // In production, use a proper role system
-    const user = result.rows[0];
     if (!user.email.endsWith('@admin.com')) {
       return res.status(403).json({ error: 'Admin access required' });
     }
@@ -35,94 +31,89 @@ const isAdmin = async (req, res, next) => {
 router.get('/analytics', authenticateToken, isAdmin, async (req, res) => {
   try {
     // User statistics
-    const userStats = await pool.query(`
-      SELECT 
-        COUNT(*) as total_users,
-        COUNT(CASE WHEN last_login > NOW() - INTERVAL '24 hours' THEN 1 END) as active_daily,
-        COUNT(CASE WHEN last_login > NOW() - INTERVAL '7 days' THEN 1 END) as active_weekly,
-        AVG(account_level) as avg_level,
-        SUM(fate_tokens) as total_fate_tokens,
-        SUM(gold) as total_gold
-      FROM users
-    `);
+    const allUsers = db.findMany('users', {});
+    const now = Date.now();
+    const oneDay = 24 * 60 * 60 * 1000;
+    const oneWeek = 7 * oneDay;
+    
+    const total_users = allUsers.length;
+    const active_daily = allUsers.filter(u => new Date(u.last_login).getTime() > now - oneDay).length;
+    const active_weekly = allUsers.filter(u => new Date(u.last_login).getTime() > now - oneWeek).length;
+    const avg_level = db.avg('users', 'account_level');
+    const total_fate_tokens = db.sum('users', 'fate_tokens');
+    const total_gold = db.sum('users', 'gold');
 
     // Character statistics
-    const charStats = await pool.query(`
-      SELECT 
-        COUNT(*) as total_characters,
-        COUNT(DISTINCT user_id) as users_with_characters,
-        AVG(level) as avg_character_level,
-        rarity,
-        COUNT(*) as count_by_rarity
-      FROM characters
-      GROUP BY rarity
-    `);
+    const allCharacters = db.findMany('characters', {});
+    const uniqueUserIds = [...new Set(allCharacters.map(c => c.user_id))];
+    const avgCharLevel = db.avg('characters', 'level');
+    
+    const charByRarity = {};
+    allCharacters.forEach(c => {
+      if (!charByRarity[c.rarity]) charByRarity[c.rarity] = 0;
+      charByRarity[c.rarity]++;
+    });
 
     // Gacha statistics
-    const gachaStats = await pool.query(`
-      SELECT 
-        COUNT(*) as total_pulls,
-        COUNT(CASE WHEN rarity = 5 THEN 1 END) as five_star_pulls,
-        COUNT(CASE WHEN rarity = 4 THEN 1 END) as four_star_pulls,
-        COUNT(CASE WHEN rarity = 3 THEN 1 END) as three_star_pulls,
-        banner_type,
-        COUNT(*) as pulls_by_banner
-      FROM gacha_history
-      GROUP BY banner_type
-    `);
+    const allGacha = db.findMany('gacha_history', {});
+    const gachaByBanner = {};
+    allGacha.forEach(g => {
+      if (!gachaByBanner[g.banner_type]) {
+        gachaByBanner[g.banner_type] = { total: 0, five_star: 0, four_star: 0, three_star: 0 };
+      }
+      gachaByBanner[g.banner_type].total++;
+      if (g.rarity === 5) gachaByBanner[g.banner_type].five_star++;
+      if (g.rarity === 4) gachaByBanner[g.banner_type].four_star++;
+      if (g.rarity === 3) gachaByBanner[g.banner_type].three_star++;
+    });
 
     // Battle statistics
-    const battleStats = await pool.query(`
-      SELECT 
-        chapter,
-        stage,
-        COUNT(*) as completions,
-        AVG(stars) as avg_stars
-      FROM story_progress
-      WHERE completed = true
-      GROUP BY chapter, stage
-      ORDER BY chapter, stage
-      LIMIT 20
-    `);
-
-    // Daily active users trend (last 7 days)
-    const dailyTrend = await pool.query(`
-      SELECT 
-        DATE(last_login) as date,
-        COUNT(DISTINCT id) as active_users
-      FROM users
-      WHERE last_login > NOW() - INTERVAL '7 days'
-      GROUP BY DATE(last_login)
-      ORDER BY date DESC
-    `);
-
-    // Revenue analytics (simplified - based on fate token purchases)
-    const revenueStats = await pool.query(`
-      SELECT 
-        COUNT(*) as total_users,
-        AVG(fate_tokens) as avg_tokens_per_user,
-        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY fate_tokens) as median_tokens,
-        MAX(fate_tokens) as max_tokens
-      FROM users
-    `);
+    const storyProgress = db.findMany('story_progress', { completed: true });
+    const battleStats = {};
+    storyProgress.forEach(s => {
+      const key = `${s.chapter}-${s.stage}`;
+      if (!battleStats[key]) {
+        battleStats[key] = { chapter: s.chapter, stage: s.stage, completions: 0, total_stars: 0 };
+      }
+      battleStats[key].completions++;
+      battleStats[key].total_stars += s.stars;
+    });
+    
+    const battleStatsArray = Object.values(battleStats).map(b => ({
+      ...b,
+      avg_stars: b.total_stars / b.completions,
+    })).slice(0, 20);
 
     res.json({
-      users: userStats.rows[0],
+      users: {
+        total_users,
+        active_daily,
+        active_weekly,
+        avg_level,
+        total_fate_tokens,
+        total_gold,
+      },
       characters: {
-        total: charStats.rows.reduce((sum, r) => sum + parseInt(r.count_by_rarity), 0),
-        byRarity: charStats.rows,
-        avgLevel: charStats.rows[0]?.avg_character_level || 0,
+        total: allCharacters.length,
+        users_with_characters: uniqueUserIds.length,
+        avgLevel: avgCharLevel,
+        byRarity: Object.entries(charByRarity).map(([rarity, count]) => ({ rarity: parseInt(rarity), count })),
       },
       gacha: {
-        total: gachaStats.rows.reduce((sum, r) => sum + parseInt(r.pulls_by_banner), 0),
-        byBanner: gachaStats.rows,
-        totalFiveStar: gachaStats.rows.reduce((sum, r) => sum + parseInt(r.five_star_pulls || 0), 0),
+        total: allGacha.length,
+        byBanner: Object.entries(gachaByBanner).map(([banner, stats]) => ({ banner_type: banner, ...stats })),
+        totalFiveStar: allGacha.filter(g => g.rarity === 5).length,
       },
-      battles: battleStats.rows,
+      battles: battleStatsArray,
       trends: {
-        daily: dailyTrend.rows,
+        daily: [], // Simplified - could compute daily trends if needed
       },
-      revenue: revenueStats.rows[0],
+      revenue: {
+        total_users,
+        avg_tokens_per_user: total_fate_tokens / total_users || 0,
+        median_tokens: 0, // Simplified
+        max_tokens: db.max('users', 'fate_tokens'),
+      },
     });
   } catch (error) {
     console.error('Analytics error:', error);
@@ -137,24 +128,33 @@ router.get('/users', authenticateToken, isAdmin, async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const offset = (page - 1) * limit;
 
-    const result = await pool.query(
-      `SELECT id, email, username, account_level, world_level, 
-              fate_tokens, gold, created_at, last_login
-       FROM users
-       ORDER BY created_at DESC
-       LIMIT $1 OFFSET $2`,
-      [limit, offset]
-    );
-
-    const countResult = await pool.query('SELECT COUNT(*) FROM users');
+    const allUsers = db.findMany('users', {});
+    
+    // Sort by created_at DESC
+    allUsers.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    
+    // Paginate
+    const paginatedUsers = allUsers.slice(offset, offset + limit);
+    
+    const users = paginatedUsers.map(u => ({
+      id: u.id,
+      email: u.email,
+      username: u.username,
+      account_level: u.account_level,
+      world_level: u.world_level,
+      fate_tokens: u.fate_tokens,
+      gold: u.gold,
+      created_at: u.created_at,
+      last_login: u.last_login,
+    }));
 
     res.json({
-      users: result.rows,
+      users,
       pagination: {
         page,
         limit,
-        total: parseInt(countResult.rows[0].count),
-        pages: Math.ceil(countResult.rows[0].count / limit),
+        total: allUsers.length,
+        pages: Math.ceil(allUsers.length / limit),
       },
     });
   } catch (error) {
@@ -166,51 +166,51 @@ router.get('/users', authenticateToken, isAdmin, async (req, res) => {
 // Get specific user details
 router.get('/users/:userId', authenticateToken, isAdmin, async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = parseInt(req.params.userId);
 
     // User info
-    const userResult = await pool.query(
-      `SELECT id, email, username, account_level, world_level, experience,
-              stamina, fate_tokens, gold, created_at, last_login
-       FROM users WHERE id = $1`,
-      [userId]
-    );
+    const user = db.findOne('users', { id: userId });
 
-    if (userResult.rows.length === 0) {
+    if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     // Characters
-    const charactersResult = await pool.query(
-      `SELECT c.*, p.name as pathway_name
-       FROM characters c
-       JOIN pathways p ON c.pathway_id = p.id
-       WHERE c.user_id = $1`,
-      [userId]
-    );
+    const characters = db.findMany('characters', { user_id: userId });
+    const charactersWithPathways = characters.map(c => {
+      const pathway = db.findOne('pathways', { id: c.pathway_id });
+      return { ...c, pathway_name: pathway?.name };
+    });
 
     // Gacha history
-    const gachaResult = await pool.query(
-      `SELECT * FROM gacha_history
-       WHERE user_id = $1
-       ORDER BY pulled_at DESC
-       LIMIT 50`,
-      [userId]
-    );
+    const gachaHistory = db.findMany('gacha_history', { user_id: userId });
+    gachaHistory.sort((a, b) => new Date(b.pulled_at) - new Date(a.pulled_at));
+    const limitedGachaHistory = gachaHistory.slice(0, 50);
 
     // Story progress
-    const progressResult = await pool.query(
-      `SELECT * FROM story_progress
-       WHERE user_id = $1
-       ORDER BY chapter, stage`,
-      [userId]
-    );
+    const storyProgress = db.findMany('story_progress', { user_id: userId });
+    storyProgress.sort((a, b) => {
+      if (a.chapter !== b.chapter) return a.chapter - b.chapter;
+      return a.stage - b.stage;
+    });
 
     res.json({
-      user: userResult.rows[0],
-      characters: charactersResult.rows,
-      gachaHistory: gachaResult.rows,
-      storyProgress: progressResult.rows,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        account_level: user.account_level,
+        world_level: user.world_level,
+        experience: user.experience,
+        stamina: user.stamina,
+        fate_tokens: user.fate_tokens,
+        gold: user.gold,
+        created_at: user.created_at,
+        last_login: user.last_login,
+      },
+      characters: charactersWithPathways,
+      gachaHistory: limitedGachaHistory,
+      storyProgress,
     });
   } catch (error) {
     console.error('Get user details error:', error);
@@ -221,36 +221,26 @@ router.get('/users/:userId', authenticateToken, isAdmin, async (req, res) => {
 // Update user (admin powers)
 router.put('/users/:userId', authenticateToken, isAdmin, async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = parseInt(req.params.userId);
     const { fate_tokens, gold, account_level } = req.body;
 
-    const updates = [];
-    const values = [];
-    let paramCount = 1;
+    const updates = {};
 
     if (fate_tokens !== undefined) {
-      updates.push(`fate_tokens = $${paramCount++}`);
-      values.push(fate_tokens);
+      updates.fate_tokens = fate_tokens;
     }
     if (gold !== undefined) {
-      updates.push(`gold = $${paramCount++}`);
-      values.push(gold);
+      updates.gold = gold;
     }
     if (account_level !== undefined) {
-      updates.push(`account_level = $${paramCount++}`);
-      values.push(account_level);
+      updates.account_level = account_level;
     }
 
-    if (updates.length === 0) {
+    if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: 'No updates provided' });
     }
 
-    values.push(userId);
-
-    await pool.query(
-      `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount}`,
-      values
-    );
+    db.update('users', { id: userId }, updates);
 
     res.json({ message: 'User updated successfully' });
   } catch (error) {
@@ -263,47 +253,57 @@ router.put('/users/:userId', authenticateToken, isAdmin, async (req, res) => {
 router.get('/system', authenticateToken, isAdmin, async (req, res) => {
   try {
     // Database stats
-    const dbStats = await pool.query(`
-      SELECT 
-        (SELECT COUNT(*) FROM users) as users,
-        (SELECT COUNT(*) FROM characters) as characters,
-        (SELECT COUNT(*) FROM weapons) as weapons,
-        (SELECT COUNT(*) FROM gacha_history) as gacha_pulls,
-        (SELECT COUNT(*) FROM story_progress) as story_progress
-    `);
+    const dbStats = {
+      users: db.count('users'),
+      characters: db.count('characters'),
+      weapons: db.count('weapons'),
+      gacha_pulls: db.count('gacha_history'),
+      story_progress: db.count('story_progress'),
+    };
 
     // Top players by level
-    const topPlayers = await pool.query(`
-      SELECT username, account_level, world_level, fate_tokens, gold
-      FROM users
-      ORDER BY account_level DESC, experience DESC
-      LIMIT 10
-    `);
+    const allUsers = db.findMany('users', {});
+    allUsers.sort((a, b) => {
+      if (b.account_level !== a.account_level) return b.account_level - a.account_level;
+      return b.experience - a.experience;
+    });
+    const topPlayers = allUsers.slice(0, 10).map(u => ({
+      username: u.username,
+      account_level: u.account_level,
+      world_level: u.world_level,
+      fate_tokens: u.fate_tokens,
+      gold: u.gold,
+    }));
 
     // Most popular characters
-    const popularChars = await pool.query(`
-      SELECT character_name, COUNT(*) as count
-      FROM characters
-      GROUP BY character_name
-      ORDER BY count DESC
-      LIMIT 10
-    `);
+    const allCharacters = db.findMany('characters', {});
+    const charCounts = {};
+    allCharacters.forEach(c => {
+      charCounts[c.character_name] = (charCounts[c.character_name] || 0) + 1;
+    });
+    const popularCharacters = Object.entries(charCounts)
+      .map(([character_name, count]) => ({ character_name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
 
     // Recent activity
-    const recentActivity = await pool.query(`
-      SELECT u.username, gh.item_name, gh.rarity, gh.pulled_at
-      FROM gacha_history gh
-      JOIN users u ON gh.user_id = u.id
-      WHERE gh.rarity >= 4
-      ORDER BY gh.pulled_at DESC
-      LIMIT 20
-    `);
+    const allGacha = db.findMany('gacha_history', {}).filter(g => g.rarity >= 4);
+    allGacha.sort((a, b) => new Date(b.pulled_at) - new Date(a.pulled_at));
+    const recentActivity = allGacha.slice(0, 20).map(g => {
+      const user = db.findOne('users', { id: g.user_id });
+      return {
+        username: user?.username,
+        item_name: g.item_name,
+        rarity: g.rarity,
+        pulled_at: g.pulled_at,
+      };
+    });
 
     res.json({
-      database: dbStats.rows[0],
-      topPlayers: topPlayers.rows,
-      popularCharacters: popularChars.rows,
-      recentActivity: recentActivity.rows,
+      database: dbStats,
+      topPlayers,
+      popularCharacters,
+      recentActivity,
     });
   } catch (error) {
     console.error('System stats error:', error);
@@ -314,15 +314,12 @@ router.get('/system', authenticateToken, isAdmin, async (req, res) => {
 // Ban/unban user
 router.post('/users/:userId/ban', authenticateToken, isAdmin, async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = parseInt(req.params.userId);
     const { reason } = req.body;
 
     // In a real system, you'd add a 'banned' column
     // For now, we'll just set their tokens to 0 as a demo
-    await pool.query(
-      'UPDATE users SET fate_tokens = 0, gold = 0 WHERE id = $1',
-      [userId]
-    );
+    db.update('users', { id: userId }, { fate_tokens: 0, gold: 0 });
 
     res.json({ message: 'User banned successfully', reason });
   } catch (error) {

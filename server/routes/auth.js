@@ -1,7 +1,7 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { pool } from '../index.js';
+import { db } from '../index.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { GAME_CONFIG, CHARACTER_DATA } from '../config/game-config.js';
 
@@ -18,12 +18,9 @@ router.post('/register', async (req, res) => {
     }
 
     // Check if user exists
-    const existingUser = await pool.query(
-      'SELECT id FROM users WHERE email = $1 OR username = $2',
-      [email, username]
-    );
+    const existingUser = db.findOne('users', { email }) || db.findOne('users', { username });
 
-    if (existingUser.rows.length > 0) {
+    if (existingUser) {
       return res.status(400).json({ error: 'User already exists' });
     }
 
@@ -31,46 +28,75 @@ router.post('/register', async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 10);
 
     // Create user
-    const result = await pool.query(
-      `INSERT INTO users (email, username, password_hash, fate_tokens, gold) 
-       VALUES ($1, $2, $3, $4, $5) RETURNING id, email, username, account_level, fate_tokens, gold`,
-      [email, username, passwordHash, GAME_CONFIG.starter.fateTokens, GAME_CONFIG.starter.gold]
-    );
-
-    const newUser = result.rows[0];
+    const newUser = db.insert('users', {
+      email,
+      username,
+      password_hash: passwordHash,
+      account_level: 1,
+      world_level: 0,
+      experience: 0,
+      stamina: 120,
+      last_stamina_regen: new Date().toISOString(),
+      fate_tokens: GAME_CONFIG.starter.fateTokens,
+      gold: GAME_CONFIG.starter.gold,
+      created_at: new Date().toISOString(),
+      last_login: new Date().toISOString(),
+    });
 
     // Give starter characters
     for (const charName of GAME_CONFIG.starter.characters) {
       const charData = CHARACTER_DATA[charName];
-      await pool.query(
-        `INSERT INTO characters 
-         (user_id, character_name, pathway_id, sequence, rarity, hp, atk, def, res, spd)
-         VALUES ($1, $2, (SELECT id FROM pathways WHERE name = $3), $4, $5, $6, $7, $8, $9, $10)`,
-        [
-          newUser.id,
-          charName,
-          charData.pathway,
-          charData.sequence,
-          charData.rarity,
-          charData.baseStats.hp,
-          charData.baseStats.atk,
-          charData.baseStats.def,
-          charData.baseStats.res,
-          charData.baseStats.spd,
-        ]
-      );
+      const pathway = db.findOne('pathways', { name: charData.pathway });
+      
+      db.insert('characters', {
+        user_id: newUser.id,
+        character_name: charName,
+        pathway_id: pathway.id,
+        sequence: charData.sequence,
+        rarity: charData.rarity,
+        level: 1,
+        ascension: 0,
+        acting_progress: 0,
+        eidolon: 0,
+        hp: charData.baseStats.hp,
+        atk: charData.baseStats.atk,
+        def: charData.baseStats.def,
+        res: charData.baseStats.res,
+        spd: charData.baseStats.spd,
+        crit_rate: 5,
+        crit_dmg: 150,
+        effect: 0,
+        effectres: 0,
+        is_locked: false,
+        obtained_at: new Date().toISOString(),
+      });
     }
 
     // Initialize gacha pity
-    await pool.query(
-      `INSERT INTO gacha_pity (user_id, banner_type, pity_count, is_guaranteed)
-       VALUES ($1, 'standard', 0, false), ($1, 'limited', 0, false)`,
-      [newUser.id]
-    );
+    db.insert('gacha_pity', {
+      user_id: newUser.id,
+      banner_type: 'standard',
+      pity_count: 0,
+      is_guaranteed: false,
+    });
+    
+    db.insert('gacha_pity', {
+      user_id: newUser.id,
+      banner_type: 'limited',
+      pity_count: 0,
+      is_guaranteed: false,
+    });
 
     res.status(201).json({
       message: 'User registered successfully',
-      user: newUser,
+      user: {
+        id: newUser.id,
+        email: newUser.email,
+        username: newUser.username,
+        account_level: newUser.account_level,
+        fate_tokens: newUser.fate_tokens,
+        gold: newUser.gold,
+      },
       starterRewards: {
         characters: GAME_CONFIG.starter.characters,
         fateTokens: GAME_CONFIG.starter.fateTokens,
@@ -93,16 +119,11 @@ router.post('/login', async (req, res) => {
     }
 
     // Find user
-    const result = await pool.query(
-      'SELECT id, email, username, password_hash, account_level, world_level, fate_tokens, gold FROM users WHERE email = $1',
-      [email]
-    );
+    const user = db.findOne('users', { email });
 
-    if (result.rows.length === 0) {
+    if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-
-    const user = result.rows[0];
 
     // Verify password
     const validPassword = await bcrypt.compare(password, user.password_hash);
@@ -111,7 +132,7 @@ router.post('/login', async (req, res) => {
     }
 
     // Update last login
-    await pool.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [user.id]);
+    db.update('users', { id: user.id }, { last_login: new Date().toISOString() });
 
     // Generate JWT
     const token = jwt.sign(
@@ -120,12 +141,18 @@ router.post('/login', async (req, res) => {
       { expiresIn: process.env.JWT_EXPIRATION || '24h' }
     );
 
-    delete user.password_hash;
-
     res.json({
       message: 'Login successful',
       token,
-      user,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        account_level: user.account_level,
+        world_level: user.world_level,
+        fate_tokens: user.fate_tokens,
+        gold: user.gold,
+      },
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -136,18 +163,26 @@ router.post('/login', async (req, res) => {
 // Get profile (authenticated)
 router.get('/profile', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT id, email, username, account_level, world_level, experience, 
-              stamina, last_stamina_regen, fate_tokens, gold, created_at, last_login
-       FROM users WHERE id = $1`,
-      [req.user.userId]
-    );
+    const user = db.findOne('users', { id: req.user.userId });
 
-    if (result.rows.length === 0) {
+    if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json(result.rows[0]);
+    res.json({
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      account_level: user.account_level,
+      world_level: user.world_level,
+      experience: user.experience,
+      stamina: user.stamina,
+      last_stamina_regen: user.last_stamina_regen,
+      fate_tokens: user.fate_tokens,
+      gold: user.gold,
+      created_at: user.created_at,
+      last_login: user.last_login,
+    });
   } catch (error) {
     console.error('Profile error:', error);
     res.status(500).json({ error: 'Failed to get profile' });
