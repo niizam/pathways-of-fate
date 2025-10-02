@@ -2,7 +2,9 @@
 
 **Version:** 1.0  
 **Last Updated:** October 2025  
-**Status:** Conceptual - Ready for Development
+**Status:** In Active Development
+
+> **🚀 Recent Updates:** Database migration completed! The game now uses a simplified JSON-based database instead of PostgreSQL + Redis. See **[Implementation Status](implementation-status.md)** for current progress and what's been built so far.
 
 ## Table of Contents
 
@@ -30,8 +32,11 @@ This documentation is organized into the following sections for easy navigation:
 13. **[Roadmap & Community](roadmap.md)** - Post-launch content and community features
 14. **[Accessibility & Privacy](accessibility.md)** - Accessibility features, data privacy, and compliance
 
+### Development & Status
+15. **[Implementation Status](implementation-status.md)** - ⭐ Current progress, completed features, and roadmap tracking
+
 ### Reference
-15. **[Appendices](appendices.md)** - Character roster, weapon roster, and glossary
+16. **[Appendices](appendices.md)** - Character roster, weapon roster, and glossary
 
 ---
 

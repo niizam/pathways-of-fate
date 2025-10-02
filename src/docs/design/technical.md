@@ -88,32 +88,49 @@ Select action: _
 
 ### 2.1 Technology Stack
 
-**Framework:** Node.js (Express) or Python (FastAPI/Django)  
-**Database:** PostgreSQL (user data, characters) + Redis (caching, sessions)  
+**Framework:** Node.js (Express)  
+**Database:** JSON files (simplified KISS approach)  
+**Caching:** In-memory Map (for battle states)  
 **Authentication:** JWT tokens  
-**File Storage:** Local filesystem or S3-compatible
+**File Storage:** Local filesystem
+
+**Note:** *The original design specified PostgreSQL + Redis. The current implementation uses a JSON-based database following the KISS (Keep It Simple, Stupid) principle. See [implementation-status.md](implementation-status.md) for details on this architectural decision.*
 
 ### 2.2 Self-Hosting Requirements
 
 **Minimum:**
-- Docker & Docker Compose
+- Node.js 18+
 - 2GB RAM
-- 10GB storage
-- PostgreSQL 13+
-- Redis 6+
+- 5GB storage
+- Docker (optional, for containerized deployment)
 
 **Recommended:**
 - 4GB RAM
-- 20GB storage
-- Load balancer for scaling
+- 10GB storage
+- Regular backups of `server/db/data/` directory
+
+**Note:** *No database server required! The JSON-based system stores all data in simple files, making self-hosting significantly easier.*
 
 ### 2.3 Easy Setup
 
 ```bash
+# Clone repository
 git clone [repo]
 cd pathways-of-fate
+
+# Install dependencies
+npm run install:all
+
+# Start development servers
+npm run dev
+
+# Server: http://localhost:5000
+# Client: http://localhost:5173
+```
+
+**Production Docker Compose:**
+```bash
 docker-compose up -d
-# Automatically sets up database, seeds initial data
 # Access at http://localhost:3000
 ```
 
@@ -268,48 +285,53 @@ GET /api/friends/supports
 ```yaml
 version: '3.8'
 services:
-  frontend:
-    build: ./client
-    ports:
-      - "3000:3000"
-  backend:
+  server:
     build: ./server
     ports:
       - "5000:5000"
+    volumes:
+      - ./server/db/data:/app/db/data
     environment:
-      - DB_HOST=postgres
-      - REDIS_HOST=redis
-  postgres:
-    image: postgres:13
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-  redis:
-    image: redis:6
-    volumes:
-      - redis_data:/data
+      - NODE_ENV=production
+      - JWT_SECRET=your_jwt_secret
+      - JWT_EXPIRATION=24h
+    restart: unless-stopped
+
+  client:
+    build: ./client
+    ports:
+      - "3000:80"
+    depends_on:
+      - server
+    restart: unless-stopped
 ```
+
+**Note:** *PostgreSQL and Redis are no longer required. Data is stored in JSON files mounted from the host.*
 
 ### 6.2 Environment Variables
 
 ```
-# Database
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=pathways_of_fate
-DB_USER=postgres
-DB_PASSWORD=secure_password
-
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
-
-# JWT
+# JWT Authentication
 JWT_SECRET=your_secret_key
 JWT_EXPIRATION=24h
 
 # Game Settings
 STAMINA_REGEN_MINUTES=6
-GACHA_RATES=0.006,0.051,0.943
+GACHA_5_STAR_RATE=0.006
+GACHA_4_STAR_RATE=0.051
+GACHA_3_STAR_RATE=0.943
+
+# Optional: Port Configuration
+PORT=5000
+```
+
+**Data Backup:**
+```bash
+# Backup game data
+cp -r server/db/data/ backup-$(date +%Y%m%d)/
+
+# Restore from backup
+cp -r backup-20251002/ server/db/data/
 ```
 
 ---

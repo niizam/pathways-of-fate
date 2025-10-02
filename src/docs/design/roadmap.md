@@ -2,9 +2,11 @@
 
 [← Back to Index](README.md) | [← Previous: Economy](economy.md) | [Next: Accessibility →](accessibility.md)
 
+> **📊 Current Status:** See [Implementation Status](implementation-status.md) for detailed tracking of what's been built so far. The game is in active development with core systems (authentication, gacha, basic battle) completed.
+
 ## 1. Content Roadmap (Post-Launch)
 
-### 1.1 Phase 1: Launch (Month 0)
+### 1.1 Phase 1: Launch (Month 0) - 🚧 In Progress
 
 **Core Content:**
 - 10 story chapters (100 stages)

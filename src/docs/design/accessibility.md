@@ -189,9 +189,15 @@ Only essential data collected:
 
 ### 4.3 Data Storage
 
+**Current Implementation:**
+- JSON file-based storage (simplified architecture)
+- Data stored in `server/db/data/` directory
+- Easy backup: simply copy the data folder
+- No complex database setup required
+
 **Security Measures:**
 - HTTPS only (encrypted transmission)
-- Encrypted database (at rest)
+- File system permissions for data directory
 - Password hashing (bcrypt)
 - Regular security audits
 - Penetration testing
@@ -200,7 +206,13 @@ Only essential data collected:
 - Active accounts: Indefinite
 - Inactive accounts (2+ years): Anonymized
 - Deleted accounts: Purged within 30 days
-- Chat logs: 30 days
+- Chat logs: 30 days (when implemented)
+
+**Self-Hosting Benefits:**
+- Full control over your data
+- Simple file-based backups
+- No vendor lock-in
+- Portable between systems
 
 ### 4.4 Third-Party Services
 
