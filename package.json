@@ -1,0 +1,24 @@
+{
+  "name": "pathways-of-fate",
+  "version": "1.0.0",
+  "description": "A turn-based RPG with gacha and roguelite elements, inspired by Beyonder pathways",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
+    "dev:client": "cd client && npm run dev",
+    "dev:server": "cd server && npm run dev",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "cd client && npm run build",
+    "build:server": "cd server && npm run build",
+    "start": "cd server && npm start",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "install:all": "npm install && cd client && npm install && cd ../server && npm install"
+  },
+  "keywords": ["rpg", "gacha", "roguelite", "web-game", "turn-based"],
+  "author": "",
+  "license": "GPL-3.0",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
