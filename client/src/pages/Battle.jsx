@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { characters as charactersApi, battle as battleApi } from '../utils/api';
 
 export default function Battle() {
@@ -6,10 +6,19 @@ export default function Battle() {
   const [selectedTeam, setSelectedTeam] = useState([]);
   const [battleState, setBattleState] = useState(null);
   const [stageId, setStageId] = useState(1);
+  const [selectedCharacter, setSelectedCharacter] = useState(null);
+  const [selectedAction, setSelectedAction] = useState(null);
+  const logsEndRef = useRef(null);
 
   useEffect(() => {
     loadCharacters();
   }, []);
+
+  useEffect(() => {
+    if (logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [battleState?.logs]);
 
   const loadCharacters = async () => {
     try {
@@ -37,22 +46,30 @@ export default function Battle() {
     try {
       const response = await battleApi.start(stageId, selectedTeam.map(c => c.id));
       setBattleState(response.data);
+      setSelectedCharacter(null);
+      setSelectedAction(null);
     } catch (error) {
       alert(error.response?.data?.error || 'Failed to start battle');
     }
   };
 
-  const performAction = async (characterId, actionType, targetId) => {
-    if (!battleState) return;
+  const performAction = async (targetId) => {
+    if (!battleState || !selectedCharacter || !selectedAction) return;
 
     try {
       const response = await battleApi.action(battleState.battleId, {
-        characterId,
-        actionType,
+        characterId: selectedCharacter.id,
+        actionType: selectedAction,
         targetId,
       });
       
-      setBattleState(response.data.battleState);
+      setBattleState(prev => ({
+        ...response.data.battleState,
+        battleId: prev.battleId
+      }));
+      
+      setSelectedCharacter(null);
+      setSelectedAction(null);
 
       if (response.data.battleState.status !== 'active') {
         setTimeout(() => {
@@ -69,68 +86,103 @@ export default function Battle() {
     }
   };
 
+  const selectCharacterAction = (char, actionType) => {
+    setSelectedCharacter(char);
+    setSelectedAction(actionType);
+  };
+
   if (battleState) {
     return (
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold mb-4">Battle - Turn {battleState.turn}</h1>
 
+        {selectedCharacter && selectedAction && (
+          <div className="card mb-4 bg-primary/10 border-primary">
+            <div className="text-center">
+              <p className="text-lg font-semibold">
+                {selectedCharacter.character_name} - {selectedAction === 'basic_attack' ? 'Basic Attack' : selectedAction === 'skill' ? 'Skill' : 'Ultimate'}
+              </p>
+              <p className="text-sm text-gray-400 mt-1">Click on an enemy to attack</p>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
           <div className="card">
             <h2 className="text-xl font-bold mb-4 text-green-500">Your Team</h2>
             <div className="space-y-2">
-              {battleState.team.map((char) => (
-                <div key={char.id} className="bg-gray-800 p-3 rounded">
-                  <div className="flex justify-between mb-2">
-                    <span className="font-semibold">{char.character_name}</span>
-                    <span className="text-sm text-gray-400">
-                      Energy: {char.energy}/4
-                    </span>
-                  </div>
-                  <div className="stat-bar mb-1">
-                    <div
-                      className="stat-bar-fill hp"
-                      style={{ width: `${(char.currentHp / char.hp) * 100}%` }}
-                    />
-                  </div>
-                  <div className="text-xs text-gray-400">
-                    HP: {char.currentHp}/{char.hp}
-                  </div>
-                  <div className="flex gap-2 mt-2">
+              {battleState.team.map((char) => {
+                const basicSkill = char.skills?.find(s => s.type === 'basic_attack' || s.type === 'basic');
+                const regularSkill = char.skills?.find(s => s.type === 'skill');
+                const ultimate = char.skills?.find(s => s.type === 'ultimate');
+                
+                return (
+                  <div key={char.id} className="bg-gray-800 p-3 rounded">
+                    <div className="flex justify-between mb-2">
+                      <div>
+                        <span className="font-semibold">{char.character_name}</span>
+                        <div className="text-xs text-gray-500">{char.pathway_name}</div>
+                      </div>
+                      <span className="text-sm text-gray-400">
+                        Energy: {char.energy}/4
+                      </span>
+                    </div>
+                    <div className="stat-bar mb-1">
+                      <div
+                        className="stat-bar-fill hp"
+                        style={{ width: `${(char.currentHp / char.hp) * 100}%` }}
+                      />
+                    </div>
+                    <div className="text-xs text-gray-400 mb-2">
+                      HP: {char.currentHp}/{char.hp}
+                    </div>
+                    
                     {char.currentHp > 0 && battleState.enemies.length > 0 && (
-                      <>
-                        <button
-                          onClick={() =>
-                            performAction(char.id, 'basic_attack', battleState.enemies[0].id)
-                          }
-                          className="text-xs button-primary py-1 px-2"
-                        >
-                          Basic
-                        </button>
-                        {char.energy >= 2 && (
+                      <div className="space-y-1">
+                        <div className="flex gap-2 flex-wrap">
                           <button
-                            onClick={() =>
-                              performAction(char.id, 'skill', battleState.enemies[0].id)
-                            }
-                            className="text-xs button-secondary py-1 px-2"
+                            onClick={() => selectCharacterAction(char, 'basic_attack')}
+                            className={`text-xs py-1 px-2 rounded transition ${
+                              selectedCharacter?.id === char.id && selectedAction === 'basic_attack'
+                                ? 'bg-primary text-white'
+                                : 'button-primary'
+                            }`}
+                            title={basicSkill?.name || 'Basic Attack'}
                           >
-                            Skill
+                            {basicSkill?.name || 'Basic'}
                           </button>
-                        )}
-                        {char.energy >= 4 && (
-                          <button
-                            onClick={() =>
-                              performAction(char.id, 'ultimate', battleState.enemies[0].id)
-                            }
-                            className="text-xs bg-yellow-600 hover:bg-yellow-500 text-white py-1 px-2 rounded"
-                          >
-                            Ultimate
-                          </button>
-                        )}
-                      </>
+                          {char.energy >= 2 && (
+                            <button
+                              onClick={() => selectCharacterAction(char, 'skill')}
+                              className={`text-xs py-1 px-2 rounded transition ${
+                                selectedCharacter?.id === char.id && selectedAction === 'skill'
+                                  ? 'bg-primary text-white'
+                                  : 'button-secondary'
+                              }`}
+                              title={regularSkill?.name || 'Skill'}
+                            >
+                              {regularSkill?.name || 'Skill'}
+                            </button>
+                          )}
+                          {char.energy >= 4 && (
+                            <button
+                              onClick={() => selectCharacterAction(char, 'ultimate')}
+                              className={`text-xs py-1 px-2 rounded transition ${
+                                selectedCharacter?.id === char.id && selectedAction === 'ultimate'
+                                  ? 'bg-yellow-400 text-black'
+                                  : 'bg-yellow-600 hover:bg-yellow-500 text-white'
+                              }`}
+                              title={ultimate?.name || 'Ultimate'}
+                            >
+                              {ultimate?.name || 'Ultimate'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -140,7 +192,16 @@ export default function Battle() {
               {battleState.enemies.map((enemy) => (
                 <div 
                   key={enemy.id} 
-                  className={`p-3 rounded ${enemy.isBoss ? 'bg-red-900/30 border-2 border-red-500' : 'bg-gray-800'}`}
+                  onClick={() => selectedCharacter && selectedAction && performAction(enemy.id)}
+                  className={`p-3 rounded transition cursor-pointer ${
+                    enemy.isBoss 
+                      ? 'bg-red-900/30 border-2 border-red-500' 
+                      : 'bg-gray-800'
+                  } ${
+                    selectedCharacter && selectedAction 
+                      ? 'hover:border-primary hover:scale-105' 
+                      : ''
+                  }`}
                 >
                   <div className="flex justify-between mb-2">
                     <div>
@@ -169,9 +230,49 @@ export default function Battle() {
           </div>
         </div>
 
-        <div className="text-center">
+        {battleState.logs && battleState.logs.length > 0 && (
+          <div className="card mb-4">
+            <h2 className="text-xl font-bold mb-4">Battle Log</h2>
+            <div className="bg-gray-900 p-4 rounded max-h-64 overflow-y-auto">
+              <div className="space-y-1 text-sm">
+                {battleState.logs.map((log, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`${
+                      log.type === 'victory' ? 'text-green-400 font-bold' :
+                      log.type === 'defeat' ? 'text-red-400 font-bold' :
+                      log.type === 'ultimate' ? 'text-yellow-400' :
+                      log.type === 'enemy_action' ? 'text-red-300' :
+                      log.type === 'ko' ? 'text-red-500' :
+                      'text-gray-300'
+                    }`}
+                  >
+                    <span className="text-gray-500">[Turn {log.turn}]</span> {log.message}
+                  </div>
+                ))}
+                <div ref={logsEndRef} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="text-center space-x-4">
           <button
-            onClick={() => setBattleState(null)}
+            onClick={() => {
+              setSelectedCharacter(null);
+              setSelectedAction(null);
+            }}
+            disabled={!selectedCharacter}
+            className="button-secondary disabled:opacity-50"
+          >
+            Cancel Selection
+          </button>
+          <button
+            onClick={() => {
+              setBattleState(null);
+              setSelectedCharacter(null);
+              setSelectedAction(null);
+            }}
             className="button-secondary"
           >
             Retreat

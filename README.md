@@ -11,7 +11,7 @@ The easiest way to run Pathways of Fate is using Docker Compose:
 git clone https://github.com/niizam/pathways-of-fate.git
 cd pathways-of-fate
 
-# Start all services (database, redis, server, client)
+# Start all services (server, client)
 docker-compose up -d
 
 # Access the game at http://localhost:3000
@@ -26,8 +26,8 @@ If you prefer to run without Docker:
 ### Prerequisites
 
 - Node.js 18+ 
-- PostgreSQL 13+
-- Redis 6+
+
+**Note:** This project uses a simple JSON file-based database following the KISS principle. No external database or cache servers required!
 
 ### Setup
 
@@ -36,27 +36,20 @@ If you prefer to run without Docker:
 npm run install:all
 ```
 
-2. **Set up environment variables:**
+2. **Set up environment variables (optional):**
 ```bash
 cp .env.example .env
-# Edit .env with your configuration
+# Edit .env with your configuration (mainly for JWT secret)
 ```
 
-3. **Initialize database:**
-```bash
-# Create database
-createdb pathways_of_fate
-
-# Run migrations
-cd server && npm run migrate
-```
-
-4. **Start the development servers:**
+3. **Start the development servers:**
 ```bash
 npm run dev
 ```
 
 The client will run on http://localhost:5173 and the server on http://localhost:5000.
+
+Game data is automatically stored in `server/db/data/` as JSON files.
 
 ## Project Structure
 
@@ -73,10 +66,10 @@ pathways-of-fate/
 │   └── package.json
 ├── server/              # Express backend
 │   ├── routes/          # API route definitions
-│   ├── controllers/     # Request handlers
-│   ├── models/          # Database models
+│   ├── db/              # JSON database system
+│   │   ├── json-db.js   # Database abstraction layer
+│   │   └── data/        # JSON data files (auto-created)
 │   ├── middleware/      # Express middleware
-│   ├── utils/           # Utility functions
 │   ├── config/          # Configuration files
 │   └── package.json
 ├── src/docs/design/     # Game design documentation
@@ -132,6 +125,7 @@ API documentation is available at http://localhost:5000/api/docs when running th
 - ✅ Ethical F2P model (no pay-to-win)
 - ✅ Bot-friendly API
 - ✅ Self-hostable and open-source
+- ✅ Simple JSON-based database (KISS principle - no SQL required!)
 
 ## License
 
