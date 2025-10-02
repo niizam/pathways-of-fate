@@ -4,15 +4,6 @@ import dotenv from 'dotenv';
 import { createClient } from 'redis';
 import pg from 'pg';
 
-// Import routes
-import authRoutes from './routes/auth.js';
-import charactersRoutes from './routes/characters.js';
-import gachaRoutes from './routes/gacha.js';
-import battleRoutes from './routes/battle.js';
-import inventoryRoutes from './routes/inventory.js';
-import profileRoutes from './routes/profile.js';
-import adminRoutes from './routes/admin.js';
-
 dotenv.config();
 
 const app = express();
@@ -42,6 +33,15 @@ export const redisClient = createClient({
 
 redisClient.on('error', (err) => console.log('Redis Client Error', err));
 await redisClient.connect();
+
+// Import routes after pool and redisClient are initialized
+import authRoutes from './routes/auth.js';
+import charactersRoutes from './routes/characters.js';
+import gachaRoutes from './routes/gacha.js';
+import battleRoutes from './routes/battle.js';
+import inventoryRoutes from './routes/inventory.js';
+import profileRoutes from './routes/profile.js';
+import adminRoutes from './routes/admin.js';
 
 // Test database connection
 pool.query('SELECT NOW()', (err, res) => {
