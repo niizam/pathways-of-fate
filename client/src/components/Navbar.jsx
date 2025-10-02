@@ -3,6 +3,7 @@ import { useAuthStore } from '../utils/store';
 
 export default function Navbar() {
   const { user, logout } = useAuthStore();
+  const isAdmin = user?.email?.endsWith('@admin.com');
 
   return (
     <nav className="bg-dark border-b border-gray-700">
@@ -17,6 +18,13 @@ export default function Navbar() {
               <Link to="/characters" className="hover:text-primary transition">Characters</Link>
               <Link to="/gacha" className="hover:text-primary transition">Gacha</Link>
               <Link to="/battle" className="hover:text-primary transition">Battle</Link>
+              {isAdmin && (
+                <>
+                  <span className="text-gray-600">|</span>
+                  <Link to="/admin" className="hover:text-yellow-500 transition text-yellow-400">Admin</Link>
+                  <Link to="/admin/users" className="hover:text-yellow-500 transition text-yellow-400">Users</Link>
+                </>
+              )}
             </div>
           </div>
           <div className="flex items-center space-x-4">

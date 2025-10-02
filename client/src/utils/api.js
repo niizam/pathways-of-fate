@@ -54,3 +54,12 @@ export const profile = {
   get: () => api.get('/profile'),
   getStats: () => api.get('/profile/stats'),
 };
+
+export const admin = {
+  getAnalytics: () => api.get('/admin/analytics'),
+  getUsers: (page, limit) => api.get('/admin/users', { params: { page, limit } }),
+  getUserDetails: (userId) => api.get(`/admin/users/${userId}`),
+  updateUser: (userId, data) => api.put(`/admin/users/${userId}`, data),
+  getSystem: () => api.get('/admin/system'),
+  banUser: (userId, reason) => api.post(`/admin/users/${userId}/ban`, { reason }),
+};

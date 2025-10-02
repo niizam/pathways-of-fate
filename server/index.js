@@ -11,6 +11,7 @@ import gachaRoutes from './routes/gacha.js';
 import battleRoutes from './routes/battle.js';
 import inventoryRoutes from './routes/inventory.js';
 import profileRoutes from './routes/profile.js';
+import adminRoutes from './routes/admin.js';
 
 dotenv.config();
 
@@ -67,6 +68,7 @@ app.use('/api/gacha', gachaRoutes);
 app.use('/api/battle', battleRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/profile', profileRoutes);
+app.use('/api/admin', adminRoutes);
 
 // API documentation endpoint
 app.get('/api/docs', (req, res) => {
@@ -101,6 +103,14 @@ app.get('/api/docs', (req, res) => {
       profile: {
         'GET /api/profile': 'Get player profile',
         'GET /api/profile/stats': 'Get player statistics'
+      },
+      admin: {
+        'GET /api/admin/analytics': 'Get overall analytics (admin only)',
+        'GET /api/admin/users': 'Get all users (admin only)',
+        'GET /api/admin/users/:userId': 'Get specific user details (admin only)',
+        'PUT /api/admin/users/:userId': 'Update user (admin only)',
+        'GET /api/admin/system': 'Get system statistics (admin only)',
+        'POST /api/admin/users/:userId/ban': 'Ban user (admin only)'
       }
     },
     gameFeatures: [

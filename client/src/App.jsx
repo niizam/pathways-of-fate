@@ -6,6 +6,8 @@ import Dashboard from './pages/Dashboard';
 import Characters from './pages/Characters';
 import Gacha from './pages/Gacha';
 import Battle from './pages/Battle';
+import AdminDashboard from './pages/AdminDashboard';
+import AdminUsers from './pages/AdminUsers';
 import Navbar from './components/Navbar';
 
 function App() {
@@ -22,6 +24,8 @@ function App() {
           <Route path="/characters" element={token ? <Characters /> : <Navigate to="/login" />} />
           <Route path="/gacha" element={token ? <Gacha /> : <Navigate to="/login" />} />
           <Route path="/battle" element={token ? <Battle /> : <Navigate to="/login" />} />
+          <Route path="/admin" element={token ? <AdminDashboard /> : <Navigate to="/login" />} />
+          <Route path="/admin/users" element={token ? <AdminUsers /> : <Navigate to="/login" />} />
         </Routes>
       </div>
     </Router>

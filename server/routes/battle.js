@@ -202,20 +202,61 @@ router.get('/result/:battle_id', authenticateToken, async (req, res) => {
 
 // Helper functions
 function generateEnemies(stageId) {
-  // Simplified enemy generation
-  const numEnemies = 2 + Math.floor(stageId / 5);
+  const { ENEMY_TYPES, STAGE_CONFIG } = require('../config/game-config.js');
+  
+  const stageConfig = STAGE_CONFIG[stageId] || {
+    chapter: Math.floor(stageId / 5) + 1,
+    enemies: ['Shadow Wraith', 'Corrupted Soldier'],
+    boss: null,
+    theme: 'Unknown'
+  };
+  
   const enemies = [];
-
-  for (let i = 0; i < Math.min(numEnemies, 4); i++) {
+  const levelMultiplier = Math.floor(stageId / 5) + 1;
+  const baseLevel = stageId * 2;
+  
+  // Add regular enemies
+  const enemyTypes = stageConfig.enemies;
+  const numRegularEnemies = Math.min(2 + Math.floor(stageId / 10), 3);
+  
+  for (let i = 0; i < numRegularEnemies; i++) {
+    const enemyType = enemyTypes[i % enemyTypes.length];
+    const enemyData = ENEMY_TYPES[enemyType] || ENEMY_TYPES['Shadow Wraith'];
+    
+    const hp = Math.floor(enemyData.baseHp * levelMultiplier * enemyData.difficulty);
+    
     enemies.push({
       id: `enemy_${i}`,
-      name: 'Shadow Wraith',
-      level: Math.floor(stageId * 2),
-      hp: 500 + (stageId * 100),
-      currentHp: 500 + (stageId * 100),
-      atk: 50 + (stageId * 10),
-      def: 30 + (stageId * 5),
+      name: enemyType,
+      type: enemyData.type,
+      element: enemyData.element,
+      level: baseLevel,
+      hp: hp,
+      currentHp: hp,
+      atk: Math.floor(enemyData.baseAtk * levelMultiplier * enemyData.difficulty),
+      def: Math.floor(enemyData.baseDef * levelMultiplier * enemyData.difficulty),
     });
+  }
+  
+  // Add boss if this is a boss stage
+  if (stageConfig.boss) {
+    const bossData = ENEMY_TYPES[stageConfig.boss];
+    if (bossData) {
+      const bossHp = Math.floor(bossData.baseHp * levelMultiplier * bossData.difficulty);
+      
+      enemies.push({
+        id: 'boss',
+        name: stageConfig.boss,
+        type: bossData.type,
+        element: bossData.element,
+        level: baseLevel + 5,
+        hp: bossHp,
+        currentHp: bossHp,
+        atk: Math.floor(bossData.baseAtk * levelMultiplier * bossData.difficulty),
+        def: Math.floor(bossData.baseDef * levelMultiplier * bossData.difficulty),
+        isBoss: true,
+      });
+    }
   }
 
   return enemies;

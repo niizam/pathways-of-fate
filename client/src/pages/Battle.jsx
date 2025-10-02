@@ -138,9 +138,18 @@ export default function Battle() {
             <h2 className="text-xl font-bold mb-4 text-red-500">Enemies</h2>
             <div className="space-y-2">
               {battleState.enemies.map((enemy) => (
-                <div key={enemy.id} className="bg-gray-800 p-3 rounded">
+                <div 
+                  key={enemy.id} 
+                  className={`p-3 rounded ${enemy.isBoss ? 'bg-red-900/30 border-2 border-red-500' : 'bg-gray-800'}`}
+                >
                   <div className="flex justify-between mb-2">
-                    <span className="font-semibold">{enemy.name}</span>
+                    <div>
+                      <span className={`font-semibold ${enemy.isBoss ? 'text-red-400' : ''}`}>
+                        {enemy.name}
+                      </span>
+                      {enemy.isBoss && <span className="ml-2 text-xs bg-red-600 px-2 py-1 rounded">BOSS</span>}
+                      {enemy.type && <span className="ml-2 text-xs text-gray-500">({enemy.type})</span>}
+                    </div>
                     <span className="text-sm text-gray-400">
                       Lv {enemy.level}
                     </span>
@@ -178,19 +187,35 @@ export default function Battle() {
 
       <div className="card mb-8">
         <h2 className="text-xl font-bold mb-4">Select Stage</h2>
-        <div className="flex items-center gap-4">
-          <label className="font-semibold">Chapter-Stage:</label>
-          <select
-            value={stageId}
-            onChange={(e) => setStageId(parseInt(e.target.value))}
-            className="px-4 py-2 bg-gray-800 border border-gray-700 rounded"
-          >
-            {Array.from({ length: 20 }, (_, i) => i + 1).map((id) => (
-              <option key={id} value={id}>
-                Chapter {Math.floor(id / 10) || 1}-{id % 10 || 1}
-              </option>
-            ))}
-          </select>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {Array.from({ length: 20 }, (_, i) => i + 1).map((id) => {
+              const chapter = Math.ceil(id / 5);
+              const stageInChapter = ((id - 1) % 5) + 1;
+              const isBoss = stageInChapter === 5;
+              
+              return (
+                <button
+                  key={id}
+                  onClick={() => setStageId(id)}
+                  className={`py-3 px-4 rounded transition ${
+                    stageId === id
+                      ? 'bg-primary text-white'
+                      : isBoss
+                      ? 'bg-red-900/30 border border-red-500 hover:bg-red-900/50'
+                      : 'bg-gray-800 border border-gray-700 hover:bg-gray-700'
+                  }`}
+                >
+                  <div className="font-bold">Chapter {chapter}-{stageInChapter}</div>
+                  {isBoss && <div className="text-xs text-red-400">BOSS</div>}
+                </button>
+              );
+            })}
+          </div>
+          <div className="text-sm text-gray-400">
+            Selected: Chapter {Math.ceil(stageId / 5)}-{((stageId - 1) % 5) + 1}
+            {((stageId - 1) % 5) + 1 === 5 && <span className="text-red-400 ml-2">(Boss Stage)</span>}
+          </div>
         </div>
       </div>
 
