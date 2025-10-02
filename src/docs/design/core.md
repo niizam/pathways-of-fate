@@ -1,5 +1,13 @@
 # Pathways of Fate - Game Design Document
 
+> **📢 NOTICE:** This design document has been reorganized into multiple focused files for better navigation and maintenance.
+> 
+> **→ [Click here to view the new documentation index](README.md) ←**
+>
+> The content below is preserved for reference but may not reflect the latest updates. Please use the new documentation structure for the most current information.
+
+---
+
 ## 1. Overview
 
 **Genre:** Turn-based RPG, Gacha, Roguelite  
