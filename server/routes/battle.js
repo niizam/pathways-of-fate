@@ -1,7 +1,7 @@
 import express from 'express';
 import { db, cache } from '../index.js';
 import { authenticateToken } from '../middleware/auth.js';
-import { GAME_CONFIG } from '../config/game-config.js';
+import { GAME_CONFIG, ENEMY_TYPES, STAGE_CONFIG } from '../config/game-config.js';
 
 const router = express.Router();
 
@@ -191,8 +191,6 @@ router.get('/result/:battle_id', authenticateToken, async (req, res) => {
 
 // Helper functions
 function generateEnemies(stageId) {
-  const { ENEMY_TYPES, STAGE_CONFIG } = require('../config/game-config.js');
-  
   const stageConfig = STAGE_CONFIG[stageId] || {
     chapter: Math.floor(stageId / 5) + 1,
     enemies: ['Shadow Wraith', 'Corrupted Soldier'],
