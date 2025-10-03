@@ -1,6 +1,6 @@
 # Storage & Inventory
 
-[← Back to Index](README.md) | [← Previous: Progression](progression.md) | [Next: Quality of Life →](quality-of-life.md)
+[← Back to Index](README.md) | [← Previous: Gearing System](gearing-system.md) | [Next: Quality of Life →](quality-of-life.md)
 
 ## 1. Character Roster
 
@@ -33,14 +33,35 @@
 
 ---
 
+## 2.5 Gear Storage
+
+See [Gearing System](gearing-system.md) for complete gear mechanics.
+
+**Capacity:** 300 (expandable with premium currency: 50 slots per 100 Fate Tokens, max 1000)  
+**Categories:** Helmets, Armor, Accessories, Boots  
+**Auto-Salvage:** Set criteria to automatically break down unwanted gear:
+- Salvage all 3★ gear with bad main stats
+- Preserve 4★+ gear
+- Preserve locked gear
+
+**Management:**
+- Sort by rarity, level, slot, set
+- Lock valuable gear
+- Batch operations (enhance, salvage)
+- Filter by set bonus
+- Quick equip to characters
+
+---
+
 ## 3. Material Storage
 
 **Capacity:** Unlimited  
 **Categories:**
 - Character materials (ascension, exp)
 - Weapon materials (enhancement, refinement)
+- Gear materials (enhancement crystals, reforge stones)
 - Consumables (potions, revives, skip tickets)
-- Crafting materials (blueprints, ores)
+- Crafting materials (blueprints, ores, gear fragments)
 
 **Quick-Use Features:**
 - Use from anywhere (don't need to go to inventory)
@@ -58,4 +79,4 @@
 
 ---
 
-[← Previous: Progression](progression.md) | [Next: Quality of Life →](quality-of-life.md) | [↑ Back to Index](README.md)
+[← Previous: Gearing System](gearing-system.md) | [Next: Quality of Life →](quality-of-life.md) | [↑ Back to Index](README.md)

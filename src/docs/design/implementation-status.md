@@ -379,6 +379,26 @@ Each pathway includes theme, combat role, and description.
 - ⏳ Enhancement system
 - ⏳ Refinement system
 
+### Gearing System (📋 Design Complete, Implementation Pending)
+
+**Design Status:** ✅ Complete - See [gearing-system.md](gearing-system.md)
+- ✅ 4 gear slots defined (Helmet, Armor, Accessory, Boots)
+- ✅ Rarity tiers (3★, 4★, 5★) designed
+- ✅ Main stat and sub stat system designed
+- ✅ 9 gear sets created with 2-piece and 4-piece bonuses
+- ✅ Enhancement and reforge systems designed
+- ✅ Acquisition methods (drops, crafting, gacha) planned
+
+**Implementation Status:** ⏳ Not Started
+- ⏳ Gear data structure in game-config.js
+- ⏳ Gear database collection
+- ⏳ Gear API endpoints (equip, unequip, enhance, salvage)
+- ⏳ Gear stat integration in battle calculations
+- ⏳ Set bonus mechanics
+- ⏳ Gear UI pages
+- ⏳ Daily gear domains
+- ⏳ Gear crafting system
+
 ---
 
 ## 🚀 Deployment & Hosting
@@ -456,10 +476,11 @@ npm run dev
 **Phase 1 (Post-MVP):**
 1. ⏳ Mystic Labyrinth (roguelite mode)
 2. ⏳ Weapon system
-3. ⏳ Daily instances
-4. ⏳ More characters (expand to 30+)
-5. ⏳ Achievement system
-6. ⏳ Friend system
+3. ⏳ Gearing system (design complete, implementation pending)
+4. ⏳ Daily instances (including gear domains)
+5. ⏳ More characters (expand to 30+)
+6. ⏳ Achievement system
+7. ⏳ Friend system
 
 **Phase 2:**
 1. ⏳ Arena (PvP)

@@ -15,6 +15,7 @@ This documentation is organized into the following sections for easy navigation:
 2. **[Power System](power-system.md)** - Pathways, sequences, and acting method
 3. **[Characters](characters.md)** - Character system, archetypes, stats, skills, and progression
 4. **[Weapons](weapons.md)** - Weapon types, rarity, stats, and refinement
+4.5. **[Gearing System](gearing-system.md)** - Gear slots, sets, stats, and optimization
 5. **[Combat](combat.md)** - Turn-based mechanics, damage calculation, and status effects
 6. **[Enemies](enemies.md)** - Enemy types, AI behavior, and corruption system
 
@@ -23,7 +24,7 @@ This documentation is organized into the following sections for easy navigation:
 8. **[Progression Systems](progression.md)** - Player profile, stamina, currencies, and gacha
 
 ### Systems & Features
-9. **[Storage & Inventory](storage.md)** - Character roster, weapon inventory, materials, and mail
+9. **[Storage & Inventory](storage.md)** - Character roster, weapon inventory, gear storage, and mail
 10. **[Quality of Life](quality-of-life.md)** - Auto-battle, skip tickets, and player convenience features
 
 ### Technical & Operations
