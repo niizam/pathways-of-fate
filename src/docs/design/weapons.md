@@ -1,6 +1,6 @@
 # Weapon System
 
-[← Back to Index](README.md) | [← Previous: Characters](characters.md) | [Next: Combat →](combat.md)
+[← Back to Index](README.md) | [← Previous: Characters](characters.md) | [Next: Gearing System →](gearing-system.md)
 
 ## Overview
 
@@ -421,4 +421,4 @@ Some weapons are designed for specific characters:
 
 ---
 
-[← Previous: Characters](characters.md) | [Next: Combat →](combat.md) | [↑ Back to Index](README.md)
+[← Previous: Characters](characters.md) | [Next: Gearing System →](gearing-system.md) | [↑ Back to Index](README.md)
